@@ -438,11 +438,12 @@ Panel {
           Text {
             visible: root.panes.length > 0
             width: parent.width
-            text: "Click a pane to open its window · Enter opens the priority pane"
+            text: "Click a pane to open its window · Enter opens the most urgent"
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
           }
         }
       }

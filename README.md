@@ -70,6 +70,18 @@ rules can match them:
 hl.rule({ match = { class = "^agent%-windows%." }, workspace = 4 })
 ```
 
+Windows are coloured by agent status: a red border when the agent is
+waiting on you, green when it finished while you were elsewhere. Focusing
+such a window marks it seen. The colours come from two window rules the
+widget registers when it starts; they do not survive a Hyprland config
+reload, so to make them permanent (or change the colours) add them to
+`~/.config/hypr/windows.lua`:
+
+```lua
+hl.window_rule({ match = { tag = "aw-blocked" }, border_color = "rgb(f7768e) rgb(f7768e)" })
+hl.window_rule({ match = { tag = "aw-done" },    border_color = "rgb(9ece6a) rgb(9ece6a)" })
+```
+
 Inside a window, `ctrl+b q` detaches (closes the window, pane keeps running)
 and `ctrl+b ctrl+b` sends a literal `ctrl+b`. If the SSH link drops the
 window offers to reconnect with one keypress.
