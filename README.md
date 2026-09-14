@@ -14,7 +14,9 @@ anything.
   *done* (finished while you weren't looking), and *working*. Quiet when
   everything is idle.
 - **Panel** — every pane on every configured machine, most urgent first,
-  with machine, agent, directory, and title. Machines show online/offline.
+  with machine, agent, directory, and title. Machines show online/offline,
+  and each online machine has a **+** that opens a new shell there as a
+  window in one click.
 - **Click a pane** — its window comes to the front. If it has none, one is
   opened running a direct attach to that pane (over `ssh -t` for a remote
   machine). Close the window and the pane keeps running.

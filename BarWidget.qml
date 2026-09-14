@@ -118,6 +118,11 @@ Panel {
 
   function openAttention() { openPane(attentionPane) }
 
+  function createPaneOn(label) {
+    var m = machineFor(label)
+    if (m) m.createPane()
+  }
+
   function open() {
     controller.show()
     if (bar && typeof bar.requestPopout === "function") bar.requestPopout(root)
@@ -164,6 +169,7 @@ Panel {
       machine: modelData
       pluginDir: root.pluginDir
       onChanged: root.rebuild()
+      onPaneCreated: function(pane) { root.openPane(pane) }
     }
     onObjectAdded: function(index, object) { root.rebuild() }
     onObjectRemoved: function(index, object) { root.rebuild() }
@@ -300,8 +306,10 @@ Panel {
               model: root.machineStates
 
               Rectangle {
+                id: chip
                 required property var modelData
-                width: chipLabel.implicitWidth + Style.space(16)
+                readonly property bool canCreate: modelData.online
+                width: chipLabel.implicitWidth + Style.space(16) + (canCreate ? plusArea.width : 0)
                 height: Style.space(26)
                 radius: height / 2
                 color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
@@ -311,8 +319,10 @@ Panel {
 
                 Text {
                   id: chipLabel
-                  anchors.centerIn: parent
-                  text: (modelData.remote ? "󰒍 " : "󰇅 ") + modelData.label
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: (chip.modelData.remote ? "󰒍 " : "󰇅 ") + chip.modelData.label
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -320,12 +330,52 @@ Panel {
                 }
 
                 MouseArea {
-                  anchors.fill: parent
+                  anchors.left: parent.left
+                  anchors.top: parent.top
+                  anchors.bottom: parent.bottom
+                  width: chipLabel.implicitWidth + Style.space(16)
                   hoverEnabled: true
-                  onEntered: if (root.bar) root.bar.showTooltip(parent, modelData.online
-                    ? modelData.socketPath
-                    : (modelData.error || "offline") + "\n" + modelData.socketPath)
-                  onExited: if (root.bar) root.bar.hideTooltip(parent)
+                  onEntered: if (root.bar) root.bar.showTooltip(chip, chip.modelData.online
+                    ? chip.modelData.socketPath
+                    : (chip.modelData.error || "offline") + "\n" + chip.modelData.socketPath)
+                  onExited: if (root.bar) root.bar.hideTooltip(chip)
+                }
+
+                // New shell pane on this machine, opened as a window at once.
+                Rectangle {
+                  id: plusArea
+                  visible: chip.canCreate
+                  width: visible ? Style.space(22) : 0
+                  anchors.right: parent.right
+                  anchors.top: parent.top
+                  anchors.bottom: parent.bottom
+                  anchors.margins: 1
+                  radius: height / 2
+                  color: plusMouse.containsMouse
+                    ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+                    : "transparent"
+
+                  Text {
+                    anchors.centerIn: parent
+                    text: "+"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+
+                  MouseArea {
+                    id: plusMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: if (root.bar) root.bar.showTooltip(plusArea, "New shell on " + chip.modelData.label)
+                    onExited: if (root.bar) root.bar.hideTooltip(plusArea)
+                    onClicked: {
+                      if (root.bar) root.bar.hideTooltip(plusArea)
+                      root.createPaneOn(chip.modelData.label)
+                    }
+                  }
                 }
               }
             }

@@ -37,6 +37,7 @@ QtObject {
 
   signal changed()
   signal focusSucceeded(string paneId)
+  signal paneCreated(var pane)
 
   function requestId(kind) {
     requestSequence++
@@ -88,6 +89,13 @@ QtObject {
   // and it lands any other attached client on the same pane.
   function focusPane(paneId) {
     if (paneId) enqueue("pane.focus", { pane_id: paneId }, "focus:" + paneId)
+  }
+
+  // A new shell tab in the server's current workspace; the response carries
+  // the root pane, so the caller can open its window without waiting for
+  // the pane.created event to round-trip through a list refresh.
+  function createPane() {
+    if (online) enqueue("tab.create", { focus: false }, "create")
   }
 
   function reconnect() {
@@ -153,6 +161,10 @@ QtObject {
       rebuildSubscription()
     } else if (kind.indexOf("focus:") === 0) {
       focusSucceeded(kind.slice(6))
+    } else if (kind === "create") {
+      var created = (payload.result || {}).root_pane
+      if (created) paneCreated(Backend.normalizePane(machine, created))
+      refresh()
     }
     finishRequest()
   }
