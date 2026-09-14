@@ -66,12 +66,16 @@ for h in herdr "$HOME/.local/bin/herdr" /usr/local/bin/herdr /opt/homebrew/bin/h
   if command -v "$h" >/dev/null 2>&1; then exec "$h" '"${session_args[*]}"' terminal attach '"$term"'; fi
 done
 echo "herdr not found on $(hostname)" >&2; exit 127'
+  # ssh exits 255 only for its own failures (link dropped, host unreachable);
+  # any other status is herdr ending the attach on purpose - the pane closed
+  # or you detached - and the window should simply go away.
   attach=(bash -c '
 target=$1; script=$2
 while :; do
   ssh -t -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -- "$target" "$script"
   rc=$?
-  printf "\n[agent-window] attach ended (%s). Enter to reconnect, q to close: " "$rc"
+  [ "$rc" -eq 255 ] || exit 0
+  printf "\n[agent-window] connection to %s lost. Enter to reconnect, q to close: " "$target"
   IFS= read -r answer || exit 0
   [ "$answer" = q ] && exit 0
 done' _ "$target" "$remote_script")

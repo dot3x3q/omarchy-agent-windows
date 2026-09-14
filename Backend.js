@@ -89,8 +89,12 @@ function attentionPane(panes) {
   })[0]
 }
 
+// A shell pane usually has no title until its prompt sets one, so the
+// directory is the most useful name for it. Agents get their own title.
 function paneLabel(pane, maxLength) {
-  var text = pane.title || pane.name || pane.agent || basename(pane.cwd) || pane.pane_id || "pane"
+  var text = pane.title || pane.name
+    || (pane.agent ? pane.agent + " · " + basename(pane.cwd) : basename(pane.cwd))
+    || pane.pane_id || "pane"
   var limit = maxLength || 40
   return text.length <= limit ? text : text.slice(0, limit - 1) + "…"
 }
