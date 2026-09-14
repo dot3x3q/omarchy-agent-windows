@@ -6,6 +6,7 @@
 // Omarchy's own first-party widgets - see THIRD_PARTY.md.
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "Backend.js" as Backend
@@ -60,7 +61,29 @@ Panel {
     }
     panes = all
     machineStates = states
+    syncWindowTags()
   }
+
+  // Paint pane windows by status through Hyprland tags (bin/agent-tags).
+  // Only runs when the class->status picture actually changed, so a burst of
+  // events costs one process at most, and none when nothing moved.
+  property string lastTagKey: "unset"
+  function syncWindowTags() {
+    var args = []
+    for (var i = 0; i < panes.length; i++) {
+      var p = panes[i]
+      if (p.status !== "blocked" && p.status !== "done") continue
+      if (!p.terminal_id) continue
+      args.push("agent-windows." + p.machine + "." + p.terminal_id + "=" + p.status)
+    }
+    args.sort()
+    var key = args.join("\n")
+    if (key === lastTagKey) return
+    lastTagKey = key
+    Quickshell.execDetached([root.pluginDir + "/bin/agent-tags", "sync"].concat(args))
+  }
+
+  Component.onCompleted: Quickshell.execDetached([root.pluginDir + "/bin/agent-tags", "rules"])
 
   function machineFor(label) {
     for (var i = 0; i < machines.count; i++) {
@@ -88,6 +111,8 @@ Panel {
       pane.machine, pane.ssh !== "" ? pane.ssh : "-", pane.session,
       pane.terminal_id, pane.machine + " · " + Backend.paneLabel(pane, 60)
     ])
+    lastTagKey = "unset"
+    tagRetouch.restart()
     close()
   }
 
@@ -107,6 +132,30 @@ Panel {
     if (opened) close()
     else open()
   }
+
+  // Focusing a pane window directly (not through the panel) should count as
+  // seeing it, the way focusing the pane in Herdr's own UI does: tell the
+  // server, which turns a finished agent back to idle and drops the badge.
+  readonly property string activeAppId: ToplevelManager.activeToplevel ? String(ToplevelManager.activeToplevel.appId || "") : ""
+  onActiveAppIdChanged: {
+    if (activeAppId.indexOf("agent-windows.") !== 0) return
+    var parts = activeAppId.split(".")
+    if (parts.length < 3) return
+    var machineLabel = parts[1]
+    var terminalId = parts.slice(2).join(".")
+    for (var i = 0; i < panes.length; i++) {
+      var p = panes[i]
+      if (p.machine === machineLabel && p.terminal_id === terminalId) {
+        var m = machineFor(p.machine)
+        if (m && p.agent !== "" && (p.status === "done" || p.status === "blocked")) m.focusPane(p.pane_id)
+        return
+      }
+    }
+  }
+
+  // A window opened for a pane that is already blocked or done needs its
+  // tag once it exists; foot takes a moment to map.
+  Timer { id: tagRetouch; interval: 1500; repeat: false; onTriggered: root.syncWindowTags() }
 
   Instantiator {
     id: machines

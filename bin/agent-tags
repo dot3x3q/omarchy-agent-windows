@@ -1,0 +1,68 @@
+#!/bin/bash
+# agent-tags rules            register the border-colour rules for this Hyprland session
+# agent-tags sync [<class>=<status> ...]
+#                             make every agent-windows.* window's tags match its pane status
+#
+# A pane window is coloured through Hyprland tags rather than a per-window
+# property: a status becomes the tag aw-blocked or aw-done, and a window rule
+# keyed on that tag paints the border. Everything happens in one hyprctl eval
+# so a refresh costs one process however many windows there are, and a window
+# that is not mentioned - its pane is gone or quiet - loses both tags.
+#
+# Rules registered here live until Hyprland reloads its config. The widget
+# re-registers them when it starts; to make them permanent, or to change the
+# colours, put the equivalent hl.window_rule lines in ~/.config/hypr/windows.lua.
+
+set -euo pipefail
+
+BLOCKED_COLOR="${AGENT_WINDOWS_BLOCKED_COLOR:-rgb(f7768e)}"
+DONE_COLOR="${AGENT_WINDOWS_DONE_COLOR:-rgb(9ece6a)}"
+
+command -v hyprctl >/dev/null 2>&1 || exit 0
+
+case "${1-}" in
+  rules)
+    hyprctl eval "
+hl.window_rule({ match = { tag = 'aw-blocked' }, border_color = '$BLOCKED_COLOR $BLOCKED_COLOR' })
+hl.window_rule({ match = { tag = 'aw-done' }, border_color = '$DONE_COLOR $DONE_COLOR' })
+" >/dev/null
+    ;;
+  sync)
+    shift
+    # Each argument is <class>=<status>. Classes are built by agent-window
+    # from validated pieces, and statuses come from Backend.js, but both are
+    # checked again here because they are spliced into Lua source.
+    want=""
+    for pair in "$@"; do
+      class="${pair%%=*}"; status="${pair#*=}"
+      [[ $class =~ ^agent-windows\.[A-Za-z0-9][A-Za-z0-9._-]{0,63}\.[A-Za-z0-9_-]{1,64}$ ]] || continue
+      case "$status" in
+        blocked|done) want+="  ['$class'] = 'aw-$status',"$'\n' ;;
+        *) ;;
+      esac
+    done
+    hyprctl eval "
+local want = {
+$want}
+for _, w in ipairs(hl.get_windows()) do
+  local class = w.class or ''
+  if class:sub(1, 14) == 'agent-windows.' then
+    local wanted = want[class]
+    local has = {}
+    for _, tag in ipairs(w.tags or {}) do has[(tag:gsub('%*$', ''))] = true end
+    for _, name in ipairs({ 'aw-blocked', 'aw-done' }) do
+      if wanted == name and not has[name] then
+        hl.dispatch(hl.dsp.window.tag({ window = 'address:' .. w.address, tag = '+' .. name }))
+      elseif wanted ~= name and has[name] then
+        hl.dispatch(hl.dsp.window.tag({ window = 'address:' .. w.address, tag = '-' .. name }))
+      end
+    end
+  end
+end
+" >/dev/null
+    ;;
+  *)
+    echo "usage: agent-tags rules | sync [<class>=<status> ...]" >&2
+    exit 2
+    ;;
+esac
