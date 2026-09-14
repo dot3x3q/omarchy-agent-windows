@@ -1,0 +1,93 @@
+#!/bin/bash
+# agent-window open <machine> <ssh-target|-> <session> <terminal-id> <title>
+#
+# Puts one Herdr pane in front of you as a Hyprland window of its own. If a
+# window for that pane already exists it is focused (workspace first, so a
+# window parked elsewhere actually comes into view); otherwise a terminal is
+# started running a direct attach to the pane, over ssh for a remote machine.
+# Closing that window only detaches; the pane keeps running in Herdr.
+#
+# The window is identified by its app id, agent-windows.<machine>.<terminal>,
+# so a second click finds it again and window rules can match it.
+#
+# The focus-workspace-then-window sequence and the uwsm/foot launch are
+# adapted from bin/herdr-sessions in jankeesvw/omarchy-herdr (MIT) - see
+# THIRD_PARTY.md.
+
+set -euo pipefail
+
+usage() { echo "usage: agent-window open <machine> <ssh-target|-> <session> <terminal-id> [title]" >&2; exit 2; }
+
+[[ ${1-} == open ]] || usage
+machine="${2-}"; target="${3-}"; session="${4:-default}"; term="${5-}"; title="${6:-$term}"
+
+# Every argument reaches a command line or a Lua expression; refuse shapes
+# that are not what Herdr and ssh hand out rather than trying to escape them.
+[[ $machine =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || usage
+[[ $session =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || usage
+[[ $term =~ ^[A-Za-z0-9_-]{1,64}$ ]] || usage
+[[ $target == - || $target =~ ^[A-Za-z0-9][A-Za-z0-9._@-]{0,127}$ ]] || usage
+
+app_id="agent-windows.$machine.$term"
+
+# ------------------------------------------------------------ existing window
+
+if command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  IFS=$'\t' read -r address workspace < <(
+    hyprctl clients -j 2>/dev/null |
+      jq -r --arg id "$app_id" '
+        [ .[] | select(.mapped == true and .class == $id) ]
+        | sort_by(.focusHistoryID // 2147483647)
+        | .[0] | select(. != null)
+        | "\(.address)\t\(.workspace.name // "")"' 2>/dev/null
+  ) || true
+  if [[ ${address-} =~ ^0x[0-9a-fA-F]+$ ]]; then
+    if [[ ${workspace-} =~ ^(special:)?[A-Za-z0-9_-]{1,32}$ ]]; then
+      hyprctl dispatch "hl.dsp.focus({ workspace = '$workspace' })" >/dev/null 2>&1 || true
+    fi
+    hyprctl dispatch "hl.dsp.focus({ window = 'address:$address' })" >/dev/null 2>&1 || true
+    exit 0
+  fi
+fi
+
+# ------------------------------------------------------------------ attach
+
+session_args=()
+[[ $session == default ]] || session_args=(--session "$session")
+
+if [[ $target == - ]]; then
+  attach=(herdr "${session_args[@]}" terminal attach "$term")
+else
+  # Non-interactive ssh gets no login PATH, and Herdr's installer puts the
+  # binary under ~/.local/bin, so the remote side hunts for it. The loop at
+  # the end keeps the window useful after a drop: one keypress reattaches.
+  remote_script='
+for h in herdr "$HOME/.local/bin/herdr" /usr/local/bin/herdr /opt/homebrew/bin/herdr; do
+  if command -v "$h" >/dev/null 2>&1; then exec "$h" '"${session_args[*]}"' terminal attach '"$term"'; fi
+done
+echo "herdr not found on $(hostname)" >&2; exit 127'
+  attach=(bash -c '
+target=$1; script=$2
+while :; do
+  ssh -t -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -- "$target" "$script"
+  rc=$?
+  printf "\n[agent-window] attach ended (%s). Enter to reconnect, q to close: " "$rc"
+  IFS= read -r answer || exit 0
+  [ "$answer" = q ] && exit 0
+done' _ "$target" "$remote_script")
+fi
+
+launch=(setsid)
+command -v uwsm-app >/dev/null 2>&1 && launch=(setsid uwsm-app --)
+
+if command -v foot >/dev/null 2>&1; then
+  launch+=(foot "--app-id=$app_id" "--title=$title" -e "${attach[@]}")
+elif command -v xdg-terminal-exec >/dev/null 2>&1; then
+  launch+=(xdg-terminal-exec "--app-id=$app_id" "--title=$title" -- "${attach[@]}")
+else
+  echo "agent-window: no terminal available (foot or xdg-terminal-exec)" >&2
+  exit 1
+fi
+
+"${launch[@]}" >/dev/null 2>&1 &
+disown

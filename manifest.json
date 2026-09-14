@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "rubys.agent-windows",
+  "name": "Agent Windows",
+  "version": "0.1.0",
+  "author": "Sam Ruby",
+  "license": "MIT",
+  "description": "Persistent Herdr panes on any machine as first-class Omarchy windows, with live agent status in the bar.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Windows",
+    "description": "Every Herdr pane on every machine, one click from its own window. Blocked and finished agents light up the bar.",
+    "category": "AI",
+    "aliases": ["agent-windows", "herdr-windows"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "machines": [ { "label": "local" } ],
+      "showIcon": true,
+      "showShells": true,
+      "terminal": "foot"
+    },
+    "schema": [
+      {
+        "key": "showIcon",
+        "type": "boolean",
+        "label": "Show icon",
+        "defaultValue": true,
+        "description": "Off keeps only the status counters."
+      },
+      {
+        "key": "showShells",
+        "type": "boolean",
+        "label": "List shell panes",
+        "defaultValue": true,
+        "description": "Off lists only panes where Herdr detected a coding agent."
+      },
+      {
+        "key": "terminal",
+        "type": "string",
+        "label": "Terminal",
+        "defaultValue": "foot",
+        "description": "Terminal used to open a pane window. Only foot is supported today."
+      }
+    ]
+  }
+}

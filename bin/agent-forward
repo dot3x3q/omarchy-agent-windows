@@ -1,0 +1,54 @@
+#!/bin/bash
+# agent-forward <ssh-target> <local-socket> <remote-socket-suffix>
+#
+# Keeps a remote Herdr socket reachable as a local unix socket. ssh -L does
+# not expand ~ on the remote, so the remote home is resolved once per
+# connection; the suffix is relative to it (an absolute suffix is used as
+# is). Runs until killed; every failure sleeps with backoff and retries, so a
+# laptop that sleeps, a VPN that flaps, or a Herdr server that restarts all
+# come back on their own. The plugin restarts this script if it ever exits.
+
+set -uo pipefail
+
+target="${1:?ssh target}"
+local_sock="${2:?local socket path}"
+suffix="${3:-.config/herdr/herdr.sock}"
+
+mkdir -p -m 700 -- "$(dirname -- "$local_sock")" || exit 1
+
+ssh_opts=(
+  -o BatchMode=yes
+  -o ConnectTimeout=10
+  -o ServerAliveInterval=15
+  -o ServerAliveCountMax=3
+  -o ExitOnForwardFailure=yes
+  -o StreamLocalBindUnlink=yes
+)
+
+delay=2
+while :; do
+  if [[ $suffix == /* ]]; then
+    remote_sock=$suffix
+  else
+    remote_home=$(ssh "${ssh_opts[@]}" -- "$target" 'printf %s "$HOME"' 2>/dev/null)
+    if [[ -z $remote_home ]]; then
+      echo "agent-forward: $target unreachable; retry in ${delay}s" >&2
+      sleep "$delay"
+      delay=$(( delay < 60 ? delay * 2 : 60 ))
+      continue
+    fi
+    remote_sock="$remote_home/$suffix"
+  fi
+
+  # Blocks for the life of the connection. A clean exit here still means the
+  # forward is gone, so it is treated the same as a failure. A connection
+  # that held for a while resets the backoff: that was a working link that
+  # dropped, not a target that keeps refusing.
+  started=$SECONDS
+  ssh "${ssh_opts[@]}" -N -L "$local_sock:$remote_sock" -- "$target"
+  (( SECONDS - started > 30 )) && delay=2
+  echo "agent-forward: $target forward ended; retry in ${delay}s" >&2
+  rm -f -- "$local_sock"
+  sleep "$delay"
+  delay=$(( delay < 60 ? delay * 2 : 60 ))
+done
