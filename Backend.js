@@ -156,13 +156,15 @@ function subscriptions(panes) {
   return list
 }
 
-// Parse the machines setting defensively: it is free-form JSON in shell.json.
+// Parse the machines setting defensively: it is free-form JSON in shell.json,
+// and it reaches QML as a QVariantList, which is array-like but fails
+// Array.isArray. Anything with a numeric length is walked.
 function machinesFrom(raw) {
-  var rows = Array.isArray(raw) ? raw : []
   var out = []
   var seen = {}
-  for (var i = 0; i < rows.length; i++) {
-    var m = rows[i] || {}
+  var length = raw && typeof raw.length === "number" ? raw.length : 0
+  for (var i = 0; i < length; i++) {
+    var m = raw[i] || {}
     var label = String(m.label || (m.ssh ? m.ssh : "local")).trim()
     if (label === "" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(label) || seen[label]) continue
     seen[label] = true
