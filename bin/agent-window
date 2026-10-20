@@ -84,8 +84,15 @@ fi
 launch=(setsid)
 command -v uwsm-app >/dev/null 2>&1 && launch=(setsid uwsm-app --)
 
+# Pane windows often want a different look from everyday terminals (bigger
+# font, agent-specific key bindings), so an optional foot config dedicated to
+# them is used when present. It can `include=` the normal foot.ini.
+foot_config="${XDG_CONFIG_HOME:-$HOME/.config}/foot/agent-windows.ini"
+foot_args=()
+[[ -f $foot_config ]] && foot_args=(--config "$foot_config")
+
 if command -v foot >/dev/null 2>&1; then
-  launch+=(foot "--app-id=$app_id" "--title=$title" -e "${attach[@]}")
+  launch+=(foot "${foot_args[@]}" "--app-id=$app_id" "--title=$title" -e "${attach[@]}")
 elif command -v xdg-terminal-exec >/dev/null 2>&1; then
   launch+=(xdg-terminal-exec "--app-id=$app_id" "--title=$title" -- "${attach[@]}")
 else

@@ -64,6 +64,16 @@ Other settings (`showIcon`, `showShells`) are in the bar's settings screen.
 
 ## Windows
 
+Pane windows open in `foot`. If `~/.config/foot/agent-windows.ini` exists it
+is passed as `--config`, so pane windows can look different from your other
+terminals; start it with `include=~/.config/foot/foot.ini` to inherit the rest:
+
+```ini
+[main]
+include=~/.config/foot/foot.ini
+font=JetBrainsMono Nerd Font:size=12
+```
+
 Each pane window has app-id `agent-windows.<label>.<terminal-id>`, so window
 rules can match them:
 
